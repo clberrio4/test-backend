@@ -1,0 +1,213 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EB (Java 17) + DynamoDB + S3 bucket + HTTPS (ALB) en un solo stack
+
+Parameters:
+  AppName:
+    Type: String
+    Default: funds-backend
+  EnvName:
+    Type: String
+    Default: funds-prod
+  AwsRegion:
+    Type: String
+    Default: us-east-1
+  AllowedCorsOrigins:
+    Type: String
+    Default: https://mi-frontend.com
+  TableName:
+    Type: String
+    Default: funds-table
+  PartitionKeyName:
+    Type: String
+    Default: id
+  PartitionKeyType:
+    Type: String
+    AllowedValues: [S, N, B]
+    Default: S
+  AcmCertificateArn:
+    Type: String
+    Description: ARN del certificado ACM en la MISMA región del environment
+  ArtifactsBucketName:
+    Type: String
+    Default: ''
+    Description: (Opcional) Nombre fijo para el bucket de artefactos. Déjalo vacío para que se genere uno único.
+  ZipObjectKey:
+    Type: String
+    Default: ''
+    Description: app-deploy.zip)
+
+Conditions:
+  HasCustomBucketName: !Not [!Equals [!Ref ArtifactsBucketName, ""]]
+  HasZip: !Not [!Equals [!Ref ZipObjectKey, ""]]
+
+Resources:
+  # -------- S3 bucket para artefactos --------
+  ArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !If
+        - HasCustomBucketName
+        - !Ref ArtifactsBucketName
+        - !Sub "${AppName}-${EnvName}-artifacts-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  # -------- DynamoDB (on-demand) --------
+  FundsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref TableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: !Ref PartitionKeyName
+          AttributeType: !Ref PartitionKeyType
+      KeySchema:
+        - AttributeName: !Ref PartitionKeyName
+          KeyType: HASH
+
+  # -------- IAM Instance Role (EC2) con acceso a la tabla --------
+  EBInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AppName}-ec2-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      Policies:
+        - PolicyName: DynamoTableAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeTable
+                  - dynamodb:ListTables
+                  - dynamodb:CreateTable
+                  - dynamodb:UpdateTable
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:BatchGetItem
+                Resource: !GetAtt FundsTable.Arn
+
+  EBInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${AppName}-ec2-profile
+      Roles: [ !Ref EBInstanceRole ]
+
+  # -------- IAM Service Role para EB --------
+  EBServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AppName}-service-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: elasticbeanstalk.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkService
+
+  # -------- EB Application --------
+  EBApplication:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: !Ref AppName
+      Description: Spring Boot backend
+
+  # -------- AppVersion (solo si ya hay ZIP) --------
+  EBAppVersion:
+    Condition: HasZip
+    Type: AWS::ElasticBeanstalk::ApplicationVersion
+    Properties:
+      ApplicationName: !Ref EBApplication
+      Description: Versión desde S3
+      SourceBundle:
+        S3Bucket: !Ref ArtifactsBucket
+        S3Key: !Ref ZipObjectKey
+
+  EBEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      EnvironmentName: !Ref EnvName
+      ApplicationName: !Ref EBApplication
+      SolutionStackName: "Corretto 17 running on 64bit Amazon Linux 2"
+      VersionLabel: !If [HasZip, !Ref EBAppVersion, !Ref "AWS::NoValue"]
+      OptionSettings:
+        # Vars de entorno para Spring Boot
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRING_PROFILES_ACTIVE
+          Value: prod
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: AWS_REGION
+          Value: !Ref AwsRegion
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: DYNAMO_TABLE
+          Value: !Ref TableName
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: CORS_ALLOWED_ORIGINS
+          Value: !Ref AllowedCorsOrigins
+
+        # Roles
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: IamInstanceProfile
+          Value: !Ref EBInstanceProfile
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: ServiceRole
+          Value: !Ref EBServiceRole
+
+        # Logs a CloudWatch
+        - Namespace: aws:elasticbeanstalk:cloudwatch:logs
+          OptionName: StreamLogs
+          Value: true
+        - Namespace: aws:elasticbeanstalk:cloudwatch:logs
+          OptionName: RetentionInDays
+          Value: '14'
+
+        # HTTPS (443) con certificado ACM
+        - Namespace: aws:elbv2:listener:443
+          OptionName: ListenerEnabled
+          Value: true
+        - Namespace: aws:elbv2:listener:443
+          OptionName: SSLCertificateArns
+          Value: !Ref AcmCertificateArn
+        - Namespace: aws:elbv2:listener:443
+          OptionName: SSLPolicy
+          Value: ELBSecurityPolicy-TLS13-1-2-2021-06
+
+        # Redirección 80 -> 443
+        - Namespace: aws:elbv2:listener:80
+          OptionName: Rules
+          Value: redirect 301 https://#{host}#{path}#{query}
+
+Outputs:
+  EnvironmentURL:
+    Description: URL pública del entorno (ALB)
+    Value: !GetAtt EBEnvironment.EndpointURL
+  ArtifactsBucketNameOut:
+    Description: Nombre del bucket S3 para subir tu ZIP (si dejaste ZipObjectKey vacío)
+    Value: !Ref ArtifactsBucket
+  TableArn:
+    Description: ARN de la tabla DynamoDB
+    Value: !GetAtt FundsTable.Arn
