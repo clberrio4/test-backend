@@ -1,0 +1,252 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EB (Java 17) + DynamoDB + S3
+
+Parameters:
+  AppName:
+    Type: String
+    Default: funds-backend
+  EnvName:
+    Type: String
+    Default: funds-prod
+  AwsRegion:
+    Type: String
+    Default: us-east-1
+  AllowedCorsOrigins:
+    Type: String
+    Default: https://master.dvuidceifoaix.amplifyapp.com
+  ContextPath:
+    Type: String
+    Default: /api
+  PartitionKeyName:
+    Type: String
+    Default: id
+  PartitionKeyType:
+    Type: String
+    AllowedValues: [S, N, B]
+    Default: S
+  ArtifactsBucketName:
+    Type: String
+    Description: bucket S3 EXISTENTE con el artefacto (.zip)
+  ZipObjectKey:
+    Type: String
+    Default: ''
+    Description: ZIP del backend en S3 (p.ej. app-deploy.zip).
+  PlatformArn:
+    Type: String
+    Description: ARN de la plataforma EB (Corretto 17 en Amazon Linux 2 o 2023)
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Nombre del par de llaves EC2 para SSH (debe existir en la región)
+    Default: EC2TestAmaris
+
+  SpringAppName:
+    Type: String
+    Default: funds
+  SpringdocSwaggerUiPath:
+    Type: String
+    Default: /docs
+  SpringMailHost:
+    Type: String
+    Default: smtp.gmail.com
+  SpringMailPort:
+    Type: Number
+    Default: 587
+  SpringMailUsername:
+    Type: String
+    Default: clberrio4@gmail.com
+  SpringMailPassword:
+    Type: String
+    NoEcho: true
+    Description: Contraseña del correo
+  SpringMailFrom:
+    Type: String
+    Default: fondofpv@noreply.com
+  SpringMailSubject:
+    Type: String
+    Default: "Fondo Voluntario de Pension FPV"
+  SpringMailAuth:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+  SpringMailStartTls:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+  AppBootstrapDynamo:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+  AppBootstrapSeed:
+    Type: String
+    AllowedValues: ["true", "false"]
+    Default: "true"
+
+Conditions:
+  HasZip: !Not [!Equals [!Ref ZipObjectKey, ""]]
+
+Resources:
+  EBInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AppName}-ec2-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+      Policies:
+        - PolicyName: DynamoTableAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:ListTables
+                  - dynamodb:CreateTable
+                  - dynamodb:DescribeTable
+                  - dynamodb:UpdateTable
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:BatchWriteItem
+                  - dynamodb:BatchGetItem
+                Resource: "*"
+
+  EBInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub ${AppName}-ec2-profile
+      Roles: [ !Ref EBInstanceRole ]
+
+  EBServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AppName}-service-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: elasticbeanstalk.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth
+        - arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkService
+
+  EBApplication:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: !Ref AppName
+      Description: Spring Boot backend
+
+  EBAppVersion:
+    Condition: HasZip
+    Type: AWS::ElasticBeanstalk::ApplicationVersion
+    Properties:
+      ApplicationName: !Ref EBApplication
+      Description: Versión desde S3 existente
+      SourceBundle:
+        S3Bucket: !Ref ArtifactsBucketName
+        S3Key: !Ref ZipObjectKey
+
+  EBEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      EnvironmentName: !Ref EnvName
+      ApplicationName: !Ref EBApplication
+      PlatformArn: !Ref PlatformArn
+      VersionLabel: !If [HasZip, !Ref EBAppVersion, !Ref "AWS::NoValue"]
+      OptionSettings:
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRING_PROFILES_ACTIVE
+          Value: prod
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: AWS_REGION
+          Value: !Ref AwsRegion
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: CORS_ALLOWED_ORIGINS
+          Value: !Ref AllowedCorsOrigins
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SERVER_PORT
+          Value: '5000'
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRING_APPLICATION_NAME
+          Value: !Ref SpringAppName
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRINGDOC_SWAGGER_UI_PATH
+          Value: !Ref SpringdocSwaggerUiPath
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SERVER_SERVLET_CONTEXT_PATH
+          Value: !Ref ContextPath
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SERVER_FORWARD_HEADERS_STRATEGY
+          Value: framework
+
+        # Mail
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRING_MAIL_HOST
+          Value: !Ref SpringMailHost
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRING_MAIL_PORT
+          Value: !Ref SpringMailPort
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRING_MAIL_USERNAME
+          Value: !Ref SpringMailUsername
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRING_MAIL_PASSWORD
+          Value: !Ref SpringMailPassword
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRING_MAIL_FROM
+          Value: !Ref SpringMailFrom
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRING_MAIL_SUBJECT
+          Value: !Ref SpringMailSubject
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH
+          Value: !Ref SpringMailAuth
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: SPRING_MAIL_PROPERTIES_MAIL_SMTP_STARTTLS_ENABLE
+          Value: !Ref SpringMailStartTls
+
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: APP_BOOTSTRAP_DYNAMO
+          Value: !Ref AppBootstrapDynamo
+        - Namespace: aws:elasticbeanstalk:application:environment
+          OptionName: APP_BOOTSTRAP_SEED
+          Value: !Ref AppBootstrapSeed
+
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: IamInstanceProfile
+          Value: !Ref EBInstanceProfile
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: EC2KeyName
+          Value: !Ref KeyName
+
+        - Namespace: aws:elasticbeanstalk:environment:process:default
+          OptionName: HealthCheckPath
+          Value: !Sub ${ContextPath}/actuator/health
+        - Namespace: aws:elasticbeanstalk:environment:process:default
+          OptionName: MatcherHTTPCode
+          Value: 200
+
+        - Namespace: aws:elasticbeanstalk:cloudwatch:logs
+          OptionName: StreamLogs
+          Value: true
+        - Namespace: aws:elasticbeanstalk:cloudwatch:logs
+          OptionName: RetentionInDays
+          Value: '14'
+
+Outputs:
+  EnvironmentURL:
+    Description: URL pública
+    Value: !GetAtt EBEnvironment.EndpointURL
