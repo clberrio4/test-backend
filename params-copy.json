@@ -1,0 +1,29 @@
+[
+  { "ParameterKey": "AppName", "ParameterValue": "" },
+  { "ParameterKey": "EnvName", "ParameterValue": "" },
+  { "ParameterKey": "AwsRegion", "ParameterValue": "" },
+  { "ParameterKey": "AllowedCorsOrigins", "ParameterValue": "" },
+  { "ParameterKey": "PartitionKeyName", "ParameterValue": "" },
+  { "ParameterKey": "PartitionKeyType", "ParameterValue": "" },
+  { "ParameterKey": "ArtifactsBucketName", "ParameterValue": "" },
+  { "ParameterKey": "ZipObjectKey", "ParameterValue": "" },
+  { "ParameterKey": "PlatformArn", "ParameterValue": "" },
+
+  { "ParameterKey": "KeyName", "ParameterValue": "" },
+  { "ParameterKey": "ContextPath", "ParameterValue": "" },
+
+  { "ParameterKey": "SpringAppName", "ParameterValue": "" },
+  { "ParameterKey": "SpringdocSwaggerUiPath", "ParameterValue": "" },
+
+  { "ParameterKey": "SpringMailHost", "ParameterValue": "" },
+  { "ParameterKey": "SpringMailPort", "ParameterValue": "" },
+  { "ParameterKey": "SpringMailUsername", "ParameterValue": "" },
+  { "ParameterKey": "SpringMailPassword", "ParameterValue": "" },
+  { "ParameterKey": "SpringMailFrom", "ParameterValue": "" },
+  { "ParameterKey": "SpringMailSubject", "ParameterValue": "" },
+  { "ParameterKey": "SpringMailAuth", "ParameterValue": "" },
+  { "ParameterKey": "SpringMailStartTls", "ParameterValue": "" },
+
+  { "ParameterKey": "AppBootstrapDynamo", "ParameterValue": "" },
+  { "ParameterKey": "AppBootstrapSeed", "ParameterValue": "" }
+]

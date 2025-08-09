@@ -1,4 +1,4 @@
-HELP.md
+README.MD
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
@@ -30,15 +30,12 @@ build/
 !**/src/test/**/build/
 
 # ---- Spring profiles con secretos (no versionar) ---
-src/main/resources/application-prod.properties
-
-no subir params, Procfile,app.jar
+**/application-prod.properties
 
 ### VS Code ###
 .vscode/
 
 # ---- Archivos temporales que no deben subirse ----
 params.json
-params-copy.json
 Procfile
 app.jar
