@@ -8,13 +8,11 @@
   { "ParameterKey": "ArtifactsBucketName", "ParameterValue": "" },
   { "ParameterKey": "ZipObjectKey", "ParameterValue": "" },
   { "ParameterKey": "PlatformArn", "ParameterValue": "" },
-
   { "ParameterKey": "KeyName", "ParameterValue": "" },
   { "ParameterKey": "ContextPath", "ParameterValue": "" },
-
   { "ParameterKey": "SpringAppName", "ParameterValue": "" },
   { "ParameterKey": "SpringdocSwaggerUiPath", "ParameterValue": "" },
-
+  { "ParameterKey": "SSLCertificateArn", "ParameterValue": "" },
   { "ParameterKey": "SpringMailHost", "ParameterValue": "" },
   { "ParameterKey": "SpringMailPort", "ParameterValue": "" },
   { "ParameterKey": "SpringMailUsername", "ParameterValue": "" },
@@ -23,7 +21,6 @@
   { "ParameterKey": "SpringMailSubject", "ParameterValue": "" },
   { "ParameterKey": "SpringMailAuth", "ParameterValue": "" },
   { "ParameterKey": "SpringMailStartTls", "ParameterValue": "" },
-
   { "ParameterKey": "AppBootstrapDynamo", "ParameterValue": "" },
   { "ParameterKey": "AppBootstrapSeed", "ParameterValue": "" }
 ]

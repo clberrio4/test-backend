@@ -31,10 +31,10 @@ aws s3 cp ".\$ZipName" "s3://$BucketName/$S3Key" --region $Region
 Remove-Item app.jar, Procfile -Force
 
 # ---- 6) Desplegando template (CloudFormation) ----
-Write-Host "Desplegando template a CloudFormation (update-stack): $StackName"
-aws cloudformation update-stack `
-  --stack-name $StackName `
-  --template-body file://$Template `
-  --parameters file://$ParamsFile `
-  --capabilities $Capabilities `
-  --region $Region
+Write-Host "Desplegando template a CloudFormation: $StackName"
+aws cloudformation create-stack `
+  --stack-name funds-backend-stack `
+  --template-body file://template.yml `
+  --parameters file://params.json `
+  --capabilities CAPABILITY_NAMED_IAM `
+  --region us-east-1

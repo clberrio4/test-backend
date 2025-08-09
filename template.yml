@@ -1,7 +1,11 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: EB (Java 17) + DynamoDB + S3
+Description: EB (Java 17) + DynamoDB + S3 + HTTPS-only (443)
 
 Parameters:
+  SSLCertificateArn:
+    Type: String
+    Description: ARN del certificado ACM para HTTPS (us-east-1)
+    Default: arn del certificado del dominio
   AppName:
     Type: String
     Default: funds-backend
@@ -167,6 +171,14 @@ Resources:
       PlatformArn: !Ref PlatformArn
       VersionLabel: !If [HasZip, !Ref EBAppVersion, !Ref "AWS::NoValue"]
       OptionSettings:
+
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: EnvironmentType
+          Value: LoadBalanced
+        - Namespace: aws:elasticbeanstalk:environment
+          OptionName: LoadBalancerType
+          Value: application
+
         - Namespace: aws:elasticbeanstalk:application:environment
           OptionName: SPRING_PROFILES_ACTIVE
           Value: prod
@@ -245,6 +257,20 @@ Resources:
         - Namespace: aws:elasticbeanstalk:cloudwatch:logs
           OptionName: RetentionInDays
           Value: '14'
+
+        - Namespace: aws:elbv2:listener:443
+          OptionName: ListenerEnabled
+          Value: true
+        - Namespace: aws:elbv2:listener:443
+          OptionName: Protocol
+          Value: HTTPS
+        - Namespace: aws:elbv2:listener:443
+          OptionName: SSLCertificateArns
+          Value: !Ref SSLCertificateArn
+
+        - Namespace: aws:elbv2:listener:80
+          OptionName: ListenerEnabled
+          Value: false
 
 Outputs:
   EnvironmentURL:
