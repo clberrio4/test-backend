@@ -267,6 +267,9 @@ Resources:
         - Namespace: aws:elbv2:listener:443
           OptionName: SSLCertificateArns
           Value: !Ref SSLCertificateArn
+        - Namespace: aws:elbv2:listener:443
+          OptionName: SSLPolicy
+          Value: ELBSecurityPolicy-2016-08
 
         - Namespace: aws:elbv2:listener:80
           OptionName: ListenerEnabled

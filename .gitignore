@@ -38,3 +38,4 @@ build/
 params.json
 Procfile
 app.jar
+app-deploy.zip
